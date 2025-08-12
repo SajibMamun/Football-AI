@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FootballAI Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 30px auto;
+            background: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a73e8;
+        }
+
+        #chat {
+            flex-grow: 1;
+            border: 1px solid #ddd;
+            background: #fff;
+            padding: 15px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .message {
+            max-width: 70%;
+            margin-bottom: 12px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            clear: both;
+            line-height: 1.4;
+        }
+
+        .user {
+            background: #1a73e8;
+            color: white;
+            float: right;
+            border-bottom-right-radius: 0;
+        }
+
+        .bot {
+            background: #e0e0e0;
+            color: #222;
+            float: left;
+            border-bottom-left-radius: 0;
+        }
+
+        #inputForm {
+            display: flex;
+        }
+
+        #questionInput {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 1rem;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        #sendBtn {
+            padding: 0 20px;
+            margin-left: 10px;
+            font-size: 1rem;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #sendBtn:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        #startSessionBtn {
+            margin-bottom: 10px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            background: #34a853;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #startSessionBtn:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        #sessionIdDisplay {
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: #555;
+            text-align: center;
+            user-select: all;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>FootballAI Chatbot</h1>
+
+    <button id="startSessionBtn">Start New Session</button>
+    <div id="sessionIdDisplay">Session ID: (no session yet)</div>
+
+    <div id="chat"></div>
+
+    <form id="inputForm">
+        <input id="questionInput" autocomplete="off" placeholder="Type your message here..." required disabled />
+        <button id="sendBtn" type="submit" disabled>Send</button>
+    </form>
+
+    <script>
+        const chatEl = document.getElementById("chat");
+        const inputForm = document.getElementById("inputForm");
+        const questionInput = document.getElementById("questionInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const startSessionBtn = document.getElementById("startSessionBtn");
+        const sessionIdDisplay = document.getElementById("sessionIdDisplay");
+
+        let sessionId = null;
+
+        function appendUserMessage(text) {
+            const div = document.createElement("div");
+            div.className = "message user";
+            div.textContent = text;
+            chatEl.appendChild(div);
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
+
+        function appendBotMessage(text) {
+            const div = document.createElement("div");
+            div.className = "message bot";
+            div.textContent = text;
+            chatEl.appendChild(div);
+            chatEl.scrollTop = chatEl.scrollHeight;
+        }
+
+        async function startSession() {
+            try {
+                startSessionBtn.disabled = true;
+                sessionIdDisplay.textContent = "Creating session...";
+
+                const res = await fetch("/api/session");
+                if (!res.ok) throw new Error("Failed to get session");
+                const data = await res.json();
+                sessionId = data.session_id;
+
+                sessionIdDisplay.textContent = `Session ID: ${sessionId}`;
+                appendBotMessage("Hello! Let's get started. What is your name?");
+
+                questionInput.disabled = false;
+                sendBtn.disabled = false;
+                questionInput.focus();
+            } catch (err) {
+                appendBotMessage("Error initializing session. Please try refreshing.");
+                console.error(err);
+            } finally {
+                startSessionBtn.disabled = false;
+            }
+        }
+
+        async function sendMessage(message) {
+            if (!sessionId) {
+                appendBotMessage("Please start a session first by clicking the button above.");
+                return;
+            }
+            appendUserMessage(message);
+
+            sendBtn.disabled = true;
+            questionInput.disabled = true;
+
+            try {
+                const res = await fetch("/api/ask", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "session-id": sessionId,  // use hyphen here
+                    },
+                    body: JSON.stringify({ question: message }),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    appendBotMessage(`Error: ${err.detail || res.statusText}`);
+                } else {
+                    const data = await res.json();
+                    appendBotMessage(data.answer);
+                }
+            } catch (err) {
+                appendBotMessage("Error contacting server.");
+                console.error(err);
+            }
+
+            sendBtn.disabled = false;
+            questionInput.disabled = false;
+            questionInput.value = "";
+            questionInput.focus();
+        }
+
+        inputForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            const message = questionInput.value.trim();
+            if (message) {
+                sendMessage(message);
+            }
+        });
+
+        startSessionBtn.addEventListener("click", () => {
+            chatEl.innerHTML = ""; // clear previous chat
+            startSession();
+        });
+    </script>
+</body>
+
+</html>
